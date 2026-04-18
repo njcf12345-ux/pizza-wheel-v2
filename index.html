@@ -406,9 +406,13 @@ function init(){
     filteredPlaces.length+" spots in your training zone";
   drawWheel(0);
   updateStats();
-  fetch('data.json').then(function(r){return r.json();}).then(function(d){COORDS=d.coords;ADDRS=d.addrs;}).catch(function(){});
+  if(history.length>0){updateHistory();winner=history[0];document.getElementById("resultName").textContent=winner;document.getElementById("resultCard").classList.add("active");}
+  if(spinCount>0){document.getElementById("spinBtn").textContent="SPIN AGAIN";}
+  fetch("data.json").then(function(r){return r.json();}).then(function(d){COORDS=d.coords;ADDRS=d.addrs;if(winner&&ADDRS[winner])document.getElementById("resultAddr").textContent=ADDRS[winner];}).catch(function(){});
 }
 
+var _rb="";
+document.addEventListener("keydown",function(e){_rb=(_rb+e.key).slice(-5);if(_rb==="reset"){["lastSpin","visitedPlaces","spinHistory","spinCount"].forEach(function(k){localStorage.removeItem(k);});visited=new Set();history=[];spinCount=0;winner="";document.getElementById("resultName").textContent="Waiting for spin";document.getElementById("resultAddr").textContent="";document.getElementById("resultCard").classList.remove("active");document.getElementById("spinBtn").textContent="SPIN";document.getElementById("spinMeta").textContent="filtered to your training zone";loadWheelPlaces();drawWheel(0);updateStats();alert("Reset! All spins cleared.");_rb="";}});
 window.addEventListener("load",init);
 </script>
 </body>
