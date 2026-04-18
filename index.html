@@ -208,7 +208,14 @@ function buildFilteredPlaces(){
     const d=approxDist(n,HOME);
     return d>=p.minMi && d<=p.maxMi;
   });
-  if(pool.length<20) pool=[...PLACES];
+  // If too few, widen radius by 2mi each side (never fall back to all places)
+  if(pool.length<16){
+    pool=PLACES.filter(n=>{
+      const d=approxDist(n,HOME);
+      return d>=Math.max(0,p.minMi-2) && d<=p.maxMi+2;
+    });
+  }
+  if(pool.length===0) pool=PLACES.slice(0,50);
   filteredPlaces=pool;
   const available=skip ? pool.filter(n=>!visited.has(n)) : pool;
   return available.length>0 ? available : pool;
@@ -396,6 +403,15 @@ function refreshWheel(){
 }
 
 function init(){
+  // Restore from localStorage
+  try{
+    var sv=localStorage.getItem("visitedPlaces");
+    var sh=localStorage.getItem("spinHistory");
+    var sc=localStorage.getItem("spinCount");
+    if(sv)JSON.parse(sv).forEach(function(p){visited.add(p);});
+    if(sh)history=JSON.parse(sh);
+    if(sc)spinCount=parseInt(sc)||0;
+  }catch(e){}
   currentPhase=getPhase();
   const days=daysToRace();
   document.getElementById("phaseLabel").textContent=
@@ -406,13 +422,45 @@ function init(){
     filteredPlaces.length+" spots in your training zone";
   drawWheel(0);
   updateStats();
-  if(history.length>0){updateHistory();winner=history[0];document.getElementById("resultName").textContent=winner;document.getElementById("resultCard").classList.add("active");}
-  if(spinCount>0){document.getElementById("spinBtn").textContent="SPIN AGAIN";}
-  fetch("data.json").then(function(r){return r.json();}).then(function(d){COORDS=d.coords;ADDRS=d.addrs;if(winner&&ADDRS[winner])document.getElementById("resultAddr").textContent=ADDRS[winner];}).catch(function(){});
+  if(history.length>0){
+    winner=history[0];
+    document.getElementById("resultName").textContent=winner;
+    document.getElementById("resultCard").classList.add("active");
+    updateHistory();
+  }
+  if(spinCount>0){
+    document.getElementById("spinBtn").textContent="SPIN AGAIN";
+    document.getElementById("spinMeta").textContent=spinCount+" spin"+(spinCount!==1?"s":"")+" · "+filteredPlaces.filter(function(n){return!visited.has(n);}).length+" in zone remaining";
+  }
+  // Load real coords + addresses in background
+  fetch("data.json").then(function(r){return r.json();}).then(function(d){
+    COORDS=d.coords;ADDRS=d.addrs;
+    // Rebuild wheel with real coords now available
+    loadWheelPlaces();drawWheel(0);updateStats();
+    document.getElementById("heroSub").textContent=filteredPlaces.length+" spots in your training zone";
+    if(winner&&ADDRS[winner])document.getElementById("resultAddr").textContent=ADDRS[winner];
+  }).catch(function(){});
 }
 
+// Secret reset: type "reset" anywhere
 var _rb="";
-document.addEventListener("keydown",function(e){_rb=(_rb+e.key).slice(-5);if(_rb==="reset"){["lastSpin","visitedPlaces","spinHistory","spinCount"].forEach(function(k){localStorage.removeItem(k);});visited=new Set();history=[];spinCount=0;winner="";document.getElementById("resultName").textContent="Waiting for spin";document.getElementById("resultAddr").textContent="";document.getElementById("resultCard").classList.remove("active");document.getElementById("spinBtn").textContent="SPIN";document.getElementById("spinMeta").textContent="filtered to your training zone";loadWheelPlaces();drawWheel(0);updateStats();alert("Reset! All spins cleared.");_rb="";}});
+document.addEventListener("keydown",function(e){
+  _rb=(_rb+e.key).slice(-5);
+  if(_rb==="reset"){
+    ["lastSpin","visitedPlaces","spinHistory","spinCount"].forEach(function(k){localStorage.removeItem(k);});
+    visited=new Set();history=[];spinCount=0;winner="";
+    document.getElementById("resultName").textContent="Waiting for spin";
+    document.getElementById("resultAddr").textContent="";
+    document.getElementById("resultCard").classList.remove("active");
+    document.getElementById("spinBtn").textContent="SPIN";
+    document.getElementById("spinMeta").textContent="filtered to your training zone";
+    loadWheelPlaces();drawWheel(0);updateStats();
+    var hb=document.getElementById("histBox");if(hb)hb.style.display="none";
+    alert("Reset! All spins cleared.");
+    _rb="";
+  }
+});
+
 window.addEventListener("load",init);
 </script>
 </body>
