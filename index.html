@@ -341,51 +341,83 @@ function copyAddr(){
 
 async function generateOutreach(){
   const btn=document.getElementById("outreachBtn");
-  btn.disabled=true;btn.textContent="Generating...";
   const card=document.getElementById("outreachCard");
+  const content=document.getElementById("outreachContent");
+  btn.disabled=true;btn.textContent="Generating...";
   card.classList.add("visible");
-  document.getElementById("outreachContent").innerHTML='<div class="oc-loading"><div class="oc-spin"></div>Asking Claude for a personalized message...</div>';
-  try{
-    const resp=await fetch("/api/outreach",{
-      method:"POST",headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({pizzaPlace:winner})
-    });
-    const data=await resp.json();
-    if(data.error)throw new Error(data.error);
-    if(data.distanceFromHome){
-      document.getElementById("homeMi").textContent=data.distanceFromHome.toFixed(1)+" mi";
-      document.getElementById("homeEta").textContent="~"+Math.round(data.distanceFromHome*1.25*10)+" min run";
-    }
-    if(data.distanceFromWork){
-      document.getElementById("workMi").textContent=data.distanceFromWork.toFixed(1)+" mi";
-      document.getElementById("workEta").textContent="~"+Math.round(data.distanceFromWork*1.25*10)+" min run";
-    }
-    const igBadge=data.instagram_verified
-      ?'<span class="oc-verified">verified</span>'
-      :'<span class="oc-unverified">unverified - check first</span>';
-    const infoRows=[
-      data.address?'<div style="font-size:12px;color:#888;margin-top:4px;">address: '+data.address+'</div>':"",
-      data.website?'<div style="font-size:12px;margin-top:2px;"><a href="'+data.website+'" target="_blank" style="color:#ff4500;">website</a></div>':"",
-      data.hours?'<div style="font-size:12px;color:#888;margin-top:2px;">hours: '+data.hours+'</div>':"",
-    ].join("");
-    document.getElementById("outreachContent").innerHTML=
-      '<div class="oc-field"><div class="oc-label">Instagram handle '+igBadge+'</div>'
-      +'<div class="oc-value oc-handle">'+(data.instagram_handle||"—")+'</div>'+infoRows+'</div>'
-      +'<div class="oc-field"><div class="oc-label">Famous for</div><div class="oc-value">'+(data.famous_for||"—")+'</div></div>'
-      +'<div class="oc-field"><div class="oc-label">Instagram DM — copy this</div>'
-      +'<div class="oc-value hi" id="dmText">'+(data.dm_message||"")+'</div>'
-      +'<button class="copy-btn" onclick="copyText('dmText',this)">Copy DM</button></div>'
-      +'<div class="oc-field"><div class="oc-label">Email subject</div><div class="oc-value">'+(data.email_subject||"")+'</div></div>'
-      +'<div class="oc-field"><div class="oc-label">Email body</div><div class="oc-value" id="emailText">'+(data.email_body||"")+'</div>'
-      +'<button class="copy-btn" onclick="copyText('emailText',this)">Copy Email</button></div>'
-      +(data.notionUrl?'<a class="notion-link" href="'+data.notionUrl+'" target="_blank">View in Notion CRM</a>':"")
-      +(data.notionError?'<div style="font-size:11px;color:#ff4500;margin-top:8px;">Notion: '+data.notionError+'</div>':"");
-  }catch(err){
-    document.getElementById("outreachContent").innerHTML='<div class="oc-loading" style="color:#ff4500;">Error: '+err.message+'</div>';
-  }
-  btn.disabled=false;btn.textContent="Generate Outreach";
-}
+  while(content.firstChild)content.removeChild(content.firstChild);
+  const load=document.createElement("div");
+  load.style.cssText="color:#444;font-size:13px;padding:8px 0;";
+  load.textContent="Asking Claude for a personalized message...";
+  content.appendChild(load);
 
+  const AKEY="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";
+  const NTOKEN="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";
+  const NDB="33249e25-4bfb-80d8-9995-f9110128a7af";
+
+  try{
+    const resp=await fetch("https://api.anthropic.com/v1/messages",{
+      method:"POST",
+      headers:{"x-api-key":AKEY,"anthropic-version":"2023-06-01","content-type":"application/json","anthropic-dangerous-direct-browser-access":"true"},
+      body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:800,messages:[{role:"user",content:"You are helping Nick Faber, a NYC marathon runner, reach out to pizza places for TikTok content raising money for NYRR Team for Kids.\n\nPizza place: "+winner+" (New York City)\n\nRespond with raw JSON only (no markdown, no backticks):\n{\n  \"instagram_handle\": \"@best_guess\",\n  \"famous_for\": \"what they are known for\",\n  \"dm_message\": \"casual Instagram DM under 150 chars - their item, TikTok, charity\",\n  \"email_subject\": \"catchy subject line\",\n  \"email_body\": \"3-4 sentences about their item, TikTok run, NYRR Team for Kids\"\n}"}]})
+    });
+    const apiData=await resp.json();
+    if(apiData.error)throw new Error(apiData.error.message);
+    let raw=apiData.content[0].text.trim();
+    if(raw.indexOf("```")===0){raw=raw.split("```")[1];if(raw.indexOf("json")===0)raw=raw.slice(4);}
+    const d=JSON.parse(raw.trim());
+    while(content.firstChild)content.removeChild(content.firstChild);
+
+    function mkRow(label,val,canCopy,bold){
+      const row=document.createElement("div");row.style.marginBottom="12px";
+      const l=document.createElement("div");l.style.cssText="font-size:9px;letter-spacing:2px;text-transform:uppercase;color:#444;margin-bottom:4px;";l.textContent=label;
+      const v=document.createElement("div");v.style.cssText="font-size:13px;color:"+(bold?"#fff":"#bbb")+";background:#111;border:1px solid #1a1a1a;border-radius:6px;padding:8px 10px;line-height:1.5;"+(bold?"font-weight:600;":"");v.textContent=val||"-";
+      row.appendChild(l);row.appendChild(v);
+      if(canCopy){
+        const b=document.createElement("button");b.style.cssText="font-size:11px;color:#444;background:transparent;border:1px solid #1e1e1e;border-radius:4px;padding:2px 8px;cursor:pointer;margin-top:5px;";b.textContent="Copy";
+        const cap=val;
+        b.addEventListener("click",function(){navigator.clipboard.writeText(cap).then(function(){b.textContent="Copied!";setTimeout(function(){b.textContent="Copy";},2000);});});
+        row.appendChild(b);
+      }
+      return row;
+    }
+
+    content.appendChild(mkRow("Instagram",d.instagram_handle,false,false));
+    content.appendChild(mkRow("Famous for",d.famous_for,false,false));
+    content.appendChild(mkRow("DM - copy this",d.dm_message,true,true));
+    content.appendChild(mkRow("Email subject",d.email_subject,false,false));
+    content.appendChild(mkRow("Email body",d.email_body,true,false));
+
+    function ntxt(v){return{rich_text:[{text:{content:String(v||"").slice(0,2000)}}]};}
+    fetch("https://api.notion.com/v1/pages",{
+      method:"POST",
+      headers:{"Authorization":"Bearer "+NTOKEN,"Notion-Version":"2022-06-28","Content-Type":"application/json"},
+      body:JSON.stringify({parent:{database_id:NDB},properties:{
+        "Name":{title:[{text:{content:winner}}]},
+        "Instagram":ntxt(d.instagram_handle),
+        "Famous For":ntxt(d.famous_for),
+        "DM Message":ntxt(d.dm_message),
+        "Email Subject":ntxt(d.email_subject),
+        "Email Body":ntxt(d.email_body)
+      }})
+    }).then(r=>r.json()).then(nr=>{
+      if(nr.id){
+        const a=document.createElement("a");
+        a.href="https://notion.so/"+nr.id.replace(/-/g,"");
+        a.target="_blank";a.textContent="View in Notion CRM";
+        a.style.cssText="display:inline-block;margin-top:10px;font-size:12px;color:#444;border:1px solid #1a1a1a;border-radius:6px;padding:5px 12px;text-decoration:none;";
+        content.appendChild(a);
+      }
+    }).catch(()=>{});
+
+  }catch(err){
+    while(content.firstChild)content.removeChild(content.firstChild);
+    const e=document.createElement("div");e.style.cssText="color:#ff4500;font-size:12px;";
+    e.textContent="Error: "+err.message;content.appendChild(e);
+  }finally{
+    btn.disabled=false;btn.textContent="Generate Outreach";
+  }
+}
 function copyText(id,btn){
   const text=document.getElementById(id).textContent;
   navigator.clipboard.writeText(text).then(()=>{
